@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  MANAGER
+  INVESTOR
+}
+
+enum AssetType {
+  CRYPTO
+}
+
+enum TransactionType {
+  BUY
+  SELL
+  DEPOSIT
+  WITHDRAW
+  FEE
+}
+
+model User {
+  id                String        @id @default(uuid())
+  name              String
+  email             String        @unique
+  passwordHash      String
+  role              Role          @default(INVESTOR)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // gestor -> investidores
+  managerId         String?
+  manager           User?         @relation("ManagerInvestors", fields: [managerId], references: [id])
+  investors         User[]        @relation("ManagerInvestors")
+
+  // carteiras
+  ownedPortfolios   Portfolio[]   @relation("PortfolioOwner")
+  createdPortfolios Portfolio[]   @relation("PortfolioCreator")
+
+  // mensagens
+  sentMessages      Message[]     @relation("SentMessages")
+  receivedMessages  Message[]     @relation("ReceivedMessages")
+
+  // transações criadas por um usuário
+  createdTransactions Transaction[] @relation("TransactionCreator")
+}
+
+model Portfolio {
+  id             String           @id @default(uuid())
+  investorId     String
+  createdById    String
+  name           String
+  createdAt      DateTime         @default(now())
+
+  investor       User             @relation("PortfolioOwner", fields: [investorId], references: [id])
+  createdBy      User             @relation("PortfolioCreator", fields: [createdById], references: [id])
+
+  assets         PortfolioAsset[]
+  transactions   Transaction[]
+
+  @@index([investorId])
+  @@index([createdById])
+}
+
+model Asset {
+  id             String           @id @default(uuid())
+  symbol         String           @unique
+  name           String
+  type           AssetType
+  isActive       Boolean          @default(true)
+
+  portfolios     PortfolioAsset[]
+  transactions   Transaction[]
+}
+
+model PortfolioAsset {
+  id             String           @id @default(uuid())
+  portfolioId    String
+  assetId        String
+  quantity       Decimal
+  averagePrice   Decimal
+  notes          String?
+
+  portfolio      Portfolio        @relation(fields: [portfolioId], references: [id])
+  asset          Asset            @relation(fields: [assetId], references: [id])
+
+  @@unique([portfolioId, assetId])
+  @@index([portfolioId])
+  @@index([assetId])
+}
+
+model Transaction {
+  id             String           @id @default(uuid())
+  portfolioId    String
+  assetId        String?
+  type           TransactionType
+  quantity       Decimal?
+  unitPrice      Decimal?
+  total          Decimal
+  createdAt      DateTime         @default(now())
+  createdById    String
+
+  portfolio      Portfolio        @relation(fields: [portfolioId], references: [id])
+  asset          Asset?           @relation(fields: [assetId], references: [id])
+  createdBy      User             @relation("TransactionCreator", fields: [createdById], references: [id])
+
+  @@index([portfolioId])
+  @@index([assetId])
+  @@index([createdById])
+}
+
+model Message {
+  id             String           @id @default(uuid())
+  senderId       String
+  receiverId     String
+  content        String
+  createdAt      DateTime         @default(now())
+  readAt         DateTime?
+
+  sender         User             @relation("SentMessages", fields: [senderId], references: [id])
+  receiver       User             @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
